@@ -1,0 +1,624 @@
+databaseChangeLog:
+
+  # ------------------------------------------------------------------
+  # Global properties (override per environment with -Dkey=value)
+  # ------------------------------------------------------------------
+  - property:
+      name: now
+      value: CURRENT_TIMESTAMP
+      dbms: mysql
+
+  # ==================================================================
+  # 001 - Core tables: users, roles, user_roles
+  # ==================================================================
+  - changeSet:
+      id: 001-create-users
+      author: dev-team
+      labels: core
+      comment: Users table
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: users
+      changes:
+        - createTable:
+            tableName: users
+            remarks: Application users
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: email
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uq_users_email
+              - column:
+                  name: password_hash
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: full_name
+                  type: VARCHAR(150)
+              - column:
+                  name: is_active
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: ${now}
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  defaultValueComputed: ${now}
+                  constraints:
+                    nullable: false
+      rollback:
+        - dropTable:
+            tableName: users
+
+  - changeSet:
+      id: 002-create-roles
+      author: dev-team
+      labels: core
+      changes:
+        - createTable:
+            tableName: roles
+            columns:
+              - column:
+                  name: id
+                  type: INT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: name
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uq_roles_name
+              - column:
+                  name: description
+                  type: VARCHAR(255)
+      rollback:
+        - dropTable:
+            tableName: roles
+
+  - changeSet:
+      id: 003-create-user-roles
+      author: dev-team
+      labels: core
+      changes:
+        - createTable:
+            tableName: user_roles
+            columns:
+              - column:
+                  name: user_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: role_id
+                  type: INT
+                  constraints:
+                    nullable: false
+        - addPrimaryKey:
+            tableName: user_roles
+            columnNames: user_id, role_id
+            constraintName: pk_user_roles
+        - addForeignKeyConstraint:
+            baseTableName: user_roles
+            baseColumnNames: user_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_user_roles_user
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: user_roles
+            baseColumnNames: role_id
+            referencedTableName: roles
+            referencedColumnNames: id
+            constraintName: fk_user_roles_role
+            onDelete: CASCADE
+      rollback:
+        - dropTable:
+            tableName: user_roles
+
+  # ==================================================================
+  # 010 - Catalog: categories, products
+  # ==================================================================
+  - changeSet:
+      id: 010-create-categories
+      author: dev-team
+      labels: catalog
+      changes:
+        - createTable:
+            tableName: categories
+            columns:
+              - column:
+                  name: id
+                  type: INT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: name
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: parent_id
+                  type: INT
+        - addForeignKeyConstraint:
+            baseTableName: categories
+            baseColumnNames: parent_id
+            referencedTableName: categories
+            referencedColumnNames: id
+            constraintName: fk_categories_parent
+            onDelete: SET NULL
+      rollback:
+        - dropTable:
+            tableName: categories
+            cascadeConstraints: true
+
+  - changeSet:
+      id: 011-create-products
+      author: dev-team
+      labels: catalog
+      changes:
+        - createTable:
+            tableName: products
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: sku
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uq_products_sku
+              - column:
+                  name: name
+                  type: VARCHAR(200)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: description
+                  type: TEXT
+              - column:
+                  name: price
+                  type: DECIMAL(12,2)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: stock_qty
+                  type: INT
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: category_id
+                  type: INT
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: ${now}
+        - addForeignKeyConstraint:
+            baseTableName: products
+            baseColumnNames: category_id
+            referencedTableName: categories
+            referencedColumnNames: id
+            constraintName: fk_products_category
+            onDelete: SET NULL
+        - createIndex:
+            tableName: products
+            indexName: idx_products_category
+            columns:
+              - column:
+                  name: category_id
+      rollback:
+        - dropTable:
+            tableName: products
+            cascadeConstraints: true
+
+  # ==================================================================
+  # 020 - Orders
+  # ==================================================================
+  - changeSet:
+      id: 020-create-orders
+      author: dev-team
+      labels: orders
+      changes:
+        - createTable:
+            tableName: orders
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: VARCHAR(20)
+                  defaultValue: PENDING
+                  constraints:
+                    nullable: false
+              - column:
+                  name: total_amount
+                  type: DECIMAL(14,2)
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: ${now}
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: orders
+            baseColumnNames: user_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_orders_user
+        - createIndex:
+            tableName: orders
+            indexName: idx_orders_user_status
+            columns:
+              - column:
+                  name: user_id
+              - column:
+                  name: status
+        - createIndex:
+            tableName: orders
+            indexName: idx_orders_created_at
+            columns:
+              - column:
+                  name: created_at
+      rollback:
+        - dropTable:
+            tableName: orders
+            cascadeConstraints: true
+
+  - changeSet:
+      id: 021-create-order-items
+      author: dev-team
+      labels: orders
+      changes:
+        - createTable:
+            tableName: order_items
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: order_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: product_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: quantity
+                  type: INT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: unit_price
+                  type: DECIMAL(12,2)
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: order_items
+            baseColumnNames: order_id
+            referencedTableName: orders
+            referencedColumnNames: id
+            constraintName: fk_order_items_order
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: order_items
+            baseColumnNames: product_id
+            referencedTableName: products
+            referencedColumnNames: id
+            constraintName: fk_order_items_product
+      rollback:
+        - dropTable:
+            tableName: order_items
+
+  # ==================================================================
+  # 030 - Alter existing tables (addColumn / modifyDataType / rename)
+  # ==================================================================
+  - changeSet:
+      id: 030-users-add-phone
+      author: dev-team
+      labels: alter
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: users
+                columnName: phone
+      changes:
+        - addColumn:
+            tableName: users
+            columns:
+              - column:
+                  name: phone
+                  type: VARCHAR(20)
+                  afterColumn: full_name
+      rollback:
+        - dropColumn:
+            tableName: users
+            columnName: phone
+
+  - changeSet:
+      id: 031-products-widen-name
+      author: dev-team
+      labels: alter
+      changes:
+        - modifyDataType:
+            tableName: products
+            columnName: name
+            newDataType: VARCHAR(300)
+      rollback:
+        - modifyDataType:
+            tableName: products
+            columnName: name
+            newDataType: VARCHAR(200)
+
+  - changeSet:
+      id: 032-orders-add-payment-method
+      author: dev-team
+      labels: alter
+      changes:
+        - addColumn:
+            tableName: orders
+            columns:
+              - column:
+                  name: payment_method
+                  type: VARCHAR(30)
+        - addNotNullConstraint:
+            tableName: orders
+            columnName: payment_method
+            columnDataType: VARCHAR(30)
+            defaultNullValue: COD
+      rollback:
+        - dropColumn:
+            tableName: orders
+            columnName: payment_method
+
+  # ==================================================================
+  # 040 - Seed data
+  # ==================================================================
+  - changeSet:
+      id: 040-seed-roles
+      author: dev-team
+      labels: seed
+      context: dev,qa,prod
+      changes:
+        - insert:
+            tableName: roles
+            columns:
+              - column: { name: name, value: ADMIN }
+              - column: { name: description, value: Full access }
+        - insert:
+            tableName: roles
+            columns:
+              - column: { name: name, value: USER }
+              - column: { name: description, value: Standard access }
+        - insert:
+            tableName: roles
+            columns:
+              - column: { name: name, value: SUPPORT }
+              - column: { name: description, value: Read-only support access }
+      rollback:
+        - delete:
+            tableName: roles
+            where: name IN ('ADMIN','USER','SUPPORT')
+
+  - changeSet:
+      id: 041-seed-sample-data
+      author: dev-team
+      labels: seed
+      context: dev,qa          # prod me run nahi hoga
+      changes:
+        - insert:
+            tableName: categories
+            columns:
+              - column: { name: name, value: Electronics }
+        - insert:
+            tableName: categories
+            columns:
+              - column: { name: name, value: Books }
+        - insert:
+            tableName: products
+            columns:
+              - column: { name: sku, value: SKU-1001 }
+              - column: { name: name, value: Sample Phone }
+              - column: { name: price, valueNumeric: 14999.00 }
+              - column: { name: stock_qty, valueNumeric: 50 }
+              - column:
+                  name: category_id
+                  valueComputed: (SELECT id FROM categories WHERE name = 'Electronics')
+      rollback:
+        - delete:
+            tableName: products
+            where: sku = 'SKU-1001'
+        - delete:
+            tableName: categories
+            where: name IN ('Electronics','Books')
+
+  # Bulk load from CSV (file repo me changelog ke relative path par rakhein)
+  # - changeSet:
+  #     id: 042-load-countries
+  #     author: dev-team
+  #     changes:
+  #       - loadData:
+  #           file: data/countries.csv
+  #           relativeToChangelogFile: true
+  #           tableName: countries
+  #           separator: ","
+  #           encoding: UTF-8
+  #     rollback:
+  #       - delete:
+  #           tableName: countries
+
+  # ==================================================================
+  # 050 - Views, triggers, procedures (raw SQL)
+  # ==================================================================
+  - changeSet:
+      id: 050-view-order-summary
+      author: dev-team
+      labels: reporting
+      runOnChange: true        # SQL badle to dobara apply hoga
+      changes:
+        - createView:
+            viewName: v_order_summary
+            replaceIfExists: true
+            selectQuery: >
+              SELECT o.id AS order_id,
+                     u.email,
+                     o.status,
+                     o.total_amount,
+                     COUNT(oi.id) AS item_count,
+                     o.created_at
+              FROM orders o
+              JOIN users u ON u.id = o.user_id
+              LEFT JOIN order_items oi ON oi.order_id = o.id
+              GROUP BY o.id, u.email, o.status, o.total_amount, o.created_at
+      rollback:
+        - dropView:
+            viewName: v_order_summary
+
+  - changeSet:
+      id: 051-trigger-order-total
+      author: dev-team
+      labels: reporting
+      changes:
+        - sql:
+            splitStatements: false
+            endDelimiter: ;
+            sql: |
+              CREATE TRIGGER trg_order_items_after_insert
+              AFTER INSERT ON order_items
+              FOR EACH ROW
+              BEGIN
+                UPDATE orders
+                   SET total_amount = total_amount + (NEW.quantity * NEW.unit_price)
+                 WHERE id = NEW.order_id;
+              END
+      rollback:
+        - sql:
+            sql: DROP TRIGGER IF EXISTS trg_order_items_after_insert;
+
+  - changeSet:
+      id: 052-procedure-cancel-order
+      author: dev-team
+      labels: reporting
+      changes:
+        - sql:
+            splitStatements: false
+            sql: |
+              CREATE PROCEDURE sp_cancel_order(IN p_order_id BIGINT)
+              BEGIN
+                UPDATE orders SET status = 'CANCELLED'
+                 WHERE id = p_order_id AND status = 'PENDING';
+              END
+      rollback:
+        - sql:
+            sql: DROP PROCEDURE IF EXISTS sp_cancel_order;
+
+  # ==================================================================
+  # 060 - Data fix example (one-time, with validation)
+  # ==================================================================
+  - changeSet:
+      id: 060-backfill-user-fullname
+      author: dev-team
+      labels: datafix
+      validCheckSum: ANY
+      preConditions:
+        - onFail: MARK_RAN
+        - sqlCheck:
+            expectedResult: 0
+            sql: SELECT COUNT(*) FROM users WHERE full_name IS NULL AND 1 = 0
+      changes:
+        - update:
+            tableName: users
+            columns:
+              - column:
+                  name: full_name
+                  valueComputed: SUBSTRING_INDEX(email, '@', 1)
+            where: full_name IS NULL
+      rollback: empty
+
+  # ==================================================================
+  # 070 - Extra indexes / constraints
+  # ==================================================================
+  - changeSet:
+      id: 070-products-fulltext-and-check
+      author: dev-team
+      labels: perf
+      changes:
+        - sql:
+            sql: ALTER TABLE products ADD FULLTEXT INDEX ftx_products_name_desc (name, description);
+        - sql:
+            sql: ALTER TABLE products ADD CONSTRAINT chk_products_price CHECK (price >= 0);
+      rollback:
+        - sql:
+            sql: ALTER TABLE products DROP CHECK chk_products_price;
+        - sql:
+            sql: ALTER TABLE products DROP INDEX ftx_products_name_desc;
+
+  # ------------------------------------------------------------------
+  # Tag - rollback ke liye marker (liquibase rollback --tag=v1.0.0)
+  # ------------------------------------------------------------------
+  - changeSet:
+      id: 999-tag-v1-0-0
+      author: dev-team
+      changes:
+        - tagDatabase:
+            tag: v1.0.0
+
+  # ------------------------------------------------------------------
+  # Aage ki files alag rakhni ho to include use karein:
+  # ------------------------------------------------------------------
+  # - includeAll:
+  #     path: db/changelog/changes/
+  #     relativeToChangelogFile: false
+  #     errorIfMissingOrEmpty: false
